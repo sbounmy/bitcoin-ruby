@@ -286,11 +286,11 @@ module Bitcoin
     end
 
     def bitcoin_elliptic_curve
-      ::OpenSSL::PKey::EC.new("secp256k1")
+      ::OpenSSL::PKey::EC.generate("secp256k1")
     end
 
     def generate_key
-      key = bitcoin_elliptic_curve.generate_key
+      key = bitcoin_elliptic_curve
       inspect_key( key )
     end
 
@@ -407,11 +407,21 @@ module Bitcoin
     end
 
     def open_key(private_key, public_key=nil)
-      key  = bitcoin_elliptic_curve
-      key.private_key = ::OpenSSL::BN.from_hex(private_key)
+      group = OpenSSL::PKey::EC::Group.new('secp256k1')
+      private_key_bn = OpenSSL::BN.new(private_key, 16)
       public_key = regenerate_public_key(private_key) unless public_key
-      key.public_key  = ::OpenSSL::PKey::EC::Point.from_hex(key.group, public_key)
-      key
+      public_key_bn = OpenSSL::BN.new(public_key, 16)
+      public_key_point = OpenSSL::PKey::EC::Point.new(group, public_key_bn)
+      
+      # Create ASN1 structure for EC private key
+      asn1 = OpenSSL::ASN1::Sequence([
+        OpenSSL::ASN1::Integer.new(1),
+        OpenSSL::ASN1::OctetString(private_key_bn.to_s(2)),
+        OpenSSL::ASN1::ObjectId('secp256k1', 0, :EXPLICIT),
+        OpenSSL::ASN1::BitString(public_key_point.to_octet_string(:uncompressed), 1, :EXPLICIT)
+      ])
+      
+      OpenSSL::PKey::EC.new(asn1.to_der)
     end
 
     def regenerate_public_key(private_key)

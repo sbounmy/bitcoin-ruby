@@ -48,7 +48,7 @@ module Bitcoin
 
     # Generate new priv/pub key.
     def generate
-      @key.generate_key
+      @key
     end
 
     # Get the private key (in hex).
@@ -261,13 +261,32 @@ module Bitcoin
     def set_priv(priv)
       value = priv.to_i(16)
       raise 'private key is not on curve' unless MIN_PRIV_KEY_MOD_ORDER <= value && value <= MAX_PRIV_KEY_MOD_ORDER
-      @key.private_key = OpenSSL::BN.from_hex(priv)
+      
+      # OpenSSL 3 compatibility
+      bn = OpenSSL::BN.from_hex(priv)
+      if @key.respond_to?(:set_private_key)
+        @key.set_private_key(bn)
+      else
+        @key.private_key = bn
+      end
     end
 
     # Set +pub+ as the new public key (converting from hex).
     def set_pub(pub, compressed = nil)
       @pubkey_compressed = compressed == nil ? self.class.is_compressed_pubkey?(pub) : compressed
-      @key.public_key = OpenSSL::PKey::EC::Point.from_hex(@key.group, pub)
+      
+      # OpenSSL 3 compatibility
+      group = @key.group
+      asn1 = OpenSSL::ASN1::Sequence([
+        OpenSSL::ASN1::Sequence([
+          OpenSSL::ASN1::ObjectId("id-ecPublicKey"),
+          OpenSSL::ASN1::ObjectId(group.curve_name)
+        ]),
+        OpenSSL::ASN1::BitString(OpenSSL::PKey::EC::Point.from_hex(group, pub).to_octet_string(:uncompressed))
+      ])
+      
+      new_key = OpenSSL::PKey::EC.new(asn1.to_der)
+      @key.public_key = new_key.public_key
     end
 
     def self.is_compressed_pubkey?(pub)

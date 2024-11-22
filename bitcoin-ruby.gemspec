@@ -27,5 +27,5 @@ Gem::Specification.new do |s|
 
   # Add development dependencies
   s.add_development_dependency 'rspec', '~> 3.12'
-  s.add_development_dependency 'pry', '~> 0.13.1'  # Downgrade Pry to a more compatible version
+  s.add_development_dependency 'debug'
 end
