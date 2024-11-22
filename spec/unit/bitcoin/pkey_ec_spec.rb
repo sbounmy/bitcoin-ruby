@@ -33,12 +33,12 @@ module Bitcoin
       let(:key) { Bitcoin::PKeyEC.new }
 
       it 'sets the private key' do
-        key.private_key = '0123456789abcdef'
+        key.private_key = OpenSSL::BN.new('0123456789abcdef', 16)
         expect(key.private_key.to_s(16)).to eq('0123456789ABCDEF')
       end
 
       it 'returns the public key' do
-        key.private_key = '0123456789abcdef'
+        key.private_key = OpenSSL::BN.new('0123456789abcdef', 16)
         expect(key.public_key_hex).to eq('041a1fd15fce078234aa292fc024178056bf006433c9b4bd208f59eb4c9efec95ba18af1fe46980989d3ff75bf9601121151ef46e2cfab8999408319ce8f3be725')
       end
     end
