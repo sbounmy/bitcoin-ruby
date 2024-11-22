@@ -12,7 +12,7 @@ module Bitcoin
   # deprecated in favor of a unification of Fixnum and BigInteger named Integer.
   # Since this project strivers for backwards-compatability, we determine the
   # appropriate class to use at initialization.
-  # 
+  #
   # This avoids annoying deprecation warnings on newer versions for ourselves
   # and library consumers.
   Integer =
@@ -29,6 +29,7 @@ module Bitcoin
   autoload :Script,     'bitcoin/script'
   autoload :VERSION,    'bitcoin/version'
   autoload :Key,        'bitcoin/key'
+  autoload :PKeyEC,        'bitcoin/pkey_ec'
   autoload :ExtKey,     'bitcoin/ext_key'
   autoload :ExtPubkey,  'bitcoin/ext_key'
   autoload :Builder,    'bitcoin/builder'
@@ -38,6 +39,7 @@ module Bitcoin
   autoload :Litecoin,   'bitcoin/litecoin'
 
   autoload :ContractHash,   'bitcoin/contracthash'
+
 
   module Trezor
     autoload :Mnemonic,   'bitcoin/trezor/mnemonic'
@@ -286,11 +288,11 @@ module Bitcoin
     end
 
     def bitcoin_elliptic_curve
-      ::OpenSSL::PKey::EC.generate("secp256k1")
+      Bitcoin::PKeyEC.new
     end
 
     def generate_key
-      key = bitcoin_elliptic_curve
+      key = Bitcoin::PKeyEC.generate_key
       inspect_key( key )
     end
 
@@ -407,21 +409,13 @@ module Bitcoin
     end
 
     def open_key(private_key, public_key=nil)
-      group = OpenSSL::PKey::EC::Group.new('secp256k1')
-      private_key_bn = OpenSSL::BN.new(private_key, 16)
-      public_key = regenerate_public_key(private_key) unless public_key
-      public_key_bn = OpenSSL::BN.new(public_key, 16)
-      public_key_point = OpenSSL::PKey::EC::Point.new(group, public_key_bn)
-      
-      # Create ASN1 structure for EC private key
-      asn1 = OpenSSL::ASN1::Sequence([
-        OpenSSL::ASN1::Integer.new(1),
-        OpenSSL::ASN1::OctetString(private_key_bn.to_s(2)),
-        OpenSSL::ASN1::ObjectId('secp256k1', 0, :EXPLICIT),
-        OpenSSL::ASN1::BitString(public_key_point.to_octet_string(:uncompressed), 1, :EXPLICIT)
-      ])
-      
-      OpenSSL::PKey::EC.new(asn1.to_der)
+      key  = bitcoin_elliptic_curve
+      key.private_key = ::OpenSSL::BN.from_hex(private_key)
+      key
+    end
+
+    def group
+      OpenSSL::PKey::EC::Group.new('secp256k1')
     end
 
     def regenerate_public_key(private_key)
