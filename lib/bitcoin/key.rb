@@ -261,7 +261,7 @@ module Bitcoin
     def set_priv(priv)
       value = priv.to_i(16)
       raise 'private key is not on curve' unless MIN_PRIV_KEY_MOD_ORDER <= value && value <= MAX_PRIV_KEY_MOD_ORDER
-        @key.private_key = bn
+      @key.private_key = OpenSSL::BN.from_hex(priv)
     end
 
     # Set +pub+ as the new public key (converting from hex).
