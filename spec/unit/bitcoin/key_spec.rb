@@ -454,4 +454,113 @@ describe Bitcoin::Key do
       end
     end
   end
+
+  describe "BIP39" do
+    let(:test_vectors) do
+      [
+        {
+          # Test vector from BIP39 spec
+          entropy: "00000401003008014030070100240500b0180340700f020044090130280540b0",
+          mnemonic: "abandon ability able about above absent absorb abstract absurd abuse access accident account accuse achieve acid acoustic acquire across act action actor actress blanket",
+          seed: "4b94d8ad0b6f4cf1715522411695201584beb2a77d3d0ad4a6b9e143c084eb2f04d76633623d8bdd770faee336a11faee5ad055b09961e256d89ac723ac203a3",
+          private_key: "5c4ffc8f27cec820e6d58fb37438b04543bebb388c282c7135ed30c8c27722d4"
+        },
+         {
+           entropy: "e9873d79c6d87dc0fb6a5778633389f4453213303da61f20bd67fc233aa33262",
+           mnemonic: "trumpet delay fury misery march there unit enough journey book tiny trigger farm another science regular busy album fly weapon crisp face sister edit",
+           seed: "473103ac1e8c51f4dcd2b1102717e434f7b9b339b332da7de55d2313d2fa1584965367b7e0cd8c4542c033f7f1af50087aa804019be0e87a8531ceceff9715d1",
+           private_key: "dbb4cf97a2e1b651e4efb22e282675e7fff84c63435f93722f029958efb1068d"
+         }
+      ]
+    end
+
+    describe "#to_bip39" do
+      it "generates valid mnemonic from private key" do
+        test_vectors.each do |vector|
+          key = Bitcoin::Key.new(vector[:entropy])
+          expect(key.to_bip39).to eq(vector[:mnemonic])
+        end
+      end
+
+      it "raises error when no private key is present" do
+        key = Bitcoin::Key.new
+        expect { key.to_bip39 }.to raise_error("No private key available")
+      end
+
+      it 'is 24 words' do
+        key = Bitcoin::Key.generate
+        expect(key.to_bip39.split.length).to eq(24)
+      end
+    end
+
+    describe ".from_bip39" do
+      it "recovers the correct private key from mnemonic" do
+        test_vectors.each do |vector|
+          key = Bitcoin::Key.from_bip39(vector[:mnemonic])
+          expect(key.seed).to eq(vector[:seed])
+          expect(key.priv).to eq(vector[:private_key])
+          expect(key.entropy).to eq(vector[:entropy])
+        end
+      end
+
+      it "stores the mnemonic with the key" do
+        mnemonic = test_vectors.first[:mnemonic]
+        key = Bitcoin::Key.from_bip39(mnemonic)
+        expect(key.mnemonic).to eq(mnemonic)
+      end
+
+      it "raises error for invalid mnemonic length" do
+        invalid_mnemonic = "abandon " * 23  # 23 words instead of 24
+        expect {
+          Bitcoin::Key.from_bip39(invalid_mnemonic)
+        }.to raise_error("Invalid mnemonic length")
+      end
+
+      it "raises error for invalid words" do
+        invalid_mnemonic = "invalid " * 24  # Invalid words
+        expect {
+          Bitcoin::Key.from_bip39(invalid_mnemonic)
+        }.to raise_error(/Invalid word in mnemonic: invalid/)
+      end
+
+      it "raises error for invalid checksum" do
+        # Modify last word to create invalid checksum
+        mnemonic = test_vectors.first[:mnemonic].sub(/blanket$/, 'abandon')
+        expect {
+          Bitcoin::Key.from_bip39(mnemonic)
+        }.to raise_error("Invalid checksum")
+      end
+    end
+
+    describe "roundtrip" do
+      it "preserves entropy through mnemonic conversion" do
+        pending "Cant figure out how to get same public key from entropy / private key"
+        # Explicitly specify we're using entropy
+        original_key = Bitcoin::Key.from_entropy(test_vectors.first[:entropy])
+        mnemonic = original_key.to_bip39
+        recovered_key = Bitcoin::Key.from_bip39(mnemonic)
+
+        expect(recovered_key.priv).to eq(test_vectors.first[:private_key])
+        expect(recovered_key.pub).to eq(original_key.pub)
+      end
+
+      it "handles direct private key initialization" do
+        # Default behavior treats input as private key
+        key = Bitcoin::Key.new(test_vectors.first[:private_key])
+        expect(key.priv).to eq(test_vectors.first[:private_key])
+      end
+    end
+
+    describe "compatibility" do
+      it "generates compressed public keys by default" do
+        key = Bitcoin::Key.from_bip39(test_vectors.first[:mnemonic])
+        expect(key.compressed).to be true
+      end
+
+      it "generates valid bitcoin addresses" do
+        key = Bitcoin::Key.from_bip39(test_vectors.first[:mnemonic])
+        expect(key.addr).to match(/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/)
+      end
+    end
+  end
 end
