@@ -81,26 +81,14 @@ describe Bitcoin::Master do
     end
   end
 
-  describe "entropy conversion" do
+  describe "from_entropy" do
     it "generates correct mnemonic from entropy" do
       test_vectors.each do |vector|
-        mnemonic = described_class.send(:entropy_to_mnemonic, vector[:entropy])
-        expect(mnemonic).to eq(vector[:mnemonic])
+        master = described_class.from_entropy(vector[:entropy])
+        expect(master.mnemonic).to eq(vector[:mnemonic])
+        expect(master.seed).to eq(vector[:seed])
+        expect(master.key.priv).to eq(vector[:private_key])
       end
-    end
-
-    it "preserves entropy through mnemonic conversion" do
-      vector = test_vectors.first
-
-      # Convert entropy to mnemonic
-      mnemonic = described_class.send(:entropy_to_mnemonic, vector[:entropy])
-
-      # Create master node from mnemonic
-      master = described_class.from_mnemonic(mnemonic)
-
-      # Should match test vector
-      expect(master.key.priv).to eq(vector[:private_key])
-      expect(master.seed).to eq(vector[:seed])
     end
   end
 
