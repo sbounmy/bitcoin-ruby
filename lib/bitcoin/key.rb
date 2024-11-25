@@ -248,67 +248,10 @@ module Bitcoin
       key
     end
 
-    def to_bip39
-      raise "No private key available" unless priv
-
-      # Convert private key to entropy (32 bytes = 256 bits)
-      entropy = [priv].pack('H*')
-
-      # Calculate checksum (first byte of SHA256)
-      checksum = Digest::SHA256.digest(entropy)[0]
-      checksum_bits = checksum.unpack('B8')[0][0...8]  # First 8 bits
-
-      # Combine entropy and checksum bits
-      combined_bits = entropy.unpack('B*')[0] + checksum_bits
-
-      # Convert bits to words (11 bits per word)
-      mnemonic_words = combined_bits.scan(/.{11}/).map do |bits|
-        self.class.word_list[bits.to_i(2)]
-      end
-
-      @mnemonic = mnemonic_words.join(' ')
-    end
-
-    alias :mnemonic :to_bip39
-
-    def self.from_bip39(mnemonic, passphrase: "")
-      # 1. Get entropy (with validation)
-      entropy = mnemonic_to_entropy(mnemonic)
-
-      # 2. Generate seed
-      salt = "mnemonic" + passphrase
-      seed = OpenSSL::PKCS5.pbkdf2_hmac(
-        mnemonic,
-        salt,
-        2048,
-        64,
-        OpenSSL::Digest::SHA512.new
-      ).unpack('H*')[0]
-
-      # 3. Generate private key
-      hmac = OpenSSL::HMAC.digest(
-        OpenSSL::Digest::SHA512.new,
-        "Bitcoin seed",
-        [seed].pack('H*')
-      )
-      private_key = hmac[0...32].unpack('H*')[0]
-
-      # 4. Create key
-      key = new(private_key, nil, compressed: true)
-      key.instance_variable_set(:@mnemonic, mnemonic)
-      key.instance_variable_set(:@seed, seed)
-      key.instance_variable_set(:@entropy, entropy)
-      key
-    end
-
     # Add accessor methods for the new instance variables
     attr_reader :seed, :entropy, :mnemonic
 
     protected
-
-    def self.word_list
-      @words ||= File.read(File.join(File.dirname(__FILE__), 'words', 'english.txt')).split("\n")
-    end
 
     # Regenerate public key from the private key.
     def regenerate_pubkey
@@ -333,32 +276,6 @@ module Bitcoin
       ["02","03"].include?(pub[0..1])
     end
 
-    private
-
-    def self.mnemonic_to_entropy(mnemonic)
-      # 1. Split into words and validate length
-      words = mnemonic.split(' ')
-      raise "Invalid mnemonic length" unless words.length == 24
-
-      # 2. Convert words to bits, validating each word
-      bits = words.map do |word|
-        index = word_list.index(word)
-        raise "Invalid word in mnemonic: #{word}" unless index
-        index.to_s(2).rjust(11, '0')
-      end.join
-
-      # 3. Split entropy and checksum
-      entropy_bits = bits[0...-8]    # First 256 bits
-      checksum_bits = bits[-8..]     # Last 8 bits
-
-      # 4. Validate checksum
-      entropy_bytes = [entropy_bits].pack('B*')
-      expected_checksum = Digest::SHA256.digest(entropy_bytes).unpack('B*')[0][0...8]
-      raise "Invalid checksum" unless checksum_bits == expected_checksum
-
-      # 5. Convert entropy bits to hex
-      entropy_bytes.unpack('H*')[0]
-    end
   end
 
 end
