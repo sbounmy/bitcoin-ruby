@@ -16,6 +16,9 @@ module Bitcoin
     # @return [Bitcoin::Key] the generated Bitcoin key
     attr_reader :key
 
+    # @return [String] hex-encoded entropy used to generate mnemonic
+    attr_reader :entropy
+
     # Number of rounds for PBKDF2
     PBKDF2_ROUNDS = 2048
 
