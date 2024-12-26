@@ -214,18 +214,48 @@ Generate or restore HD wallets with BIP39 mnemonics:
  master.key.priv  # => "5c4ffc8f27cec820e6d58fb37438b04543bebb388c282c7135ed30c8c27722d4"
  master.key.addr  # => "1ELReFsTCUY2mfaDTy32qxYiT49z786eFg"
 
-Restore from existing mnemonic:
+=== BIP32/BIP44 Derivation Paths
 
- # Basic restore
- master = Bitcoin::Master.from_mnemonic(
-   "witch collapse practice feed shame open despair creek road again ice least..."
- )
+Derive child keys using BIP32 paths:
 
- # With optional passphrase for extra security
- master = Bitcoin::Master.from_mnemonic(
-   "witch collapse practice feed shame open despair creek road again ice least...",
-   passphrase: "my secret"
- )
+ # BIP32 - Derive child keys
+ master = Bitcoin::Master.generate
+
+ # Basic derivation (BIP32)
+ child = master.node_for_path("m/0'/1/2")          # Hardened 0, then 1, then 2
+ child.addr  # => "1ABC..."
+
+ # BIP44 - Multi-account hierarchy
+ # m / purpose' / coin_type' / account' / change / address_index
+
+ # First receiving address of first account
+ receive0 = master.node_for_path("m/44'/0'/0'/0/0")  # BIP44 Bitcoin mainnet
+
+ # First change address of first account
+ change0 = master.node_for_path("m/44'/0'/0'/1/0")   # Change address
+
+ # Second account, third receiving address
+ receive2 = master.node_for_path("m/44'/0'/1'/0/2")  # Account 1, index 2
+
+Common derivation paths:
+
+ # BIP44 paths for different coins
+ "m/44'/0'/..."     # Bitcoin
+ "m/44'/1'/..."     # Bitcoin Testnet
+ "m/44'/2'/..."     # Litecoin
+ "m/44'/3'/..."     # Dogecoin
+
+ # Account structure
+ "m/44'/0'/0'/..."  # First account
+ "m/44'/0'/1'/..."  # Second account
+ "m/44'/0'/2'/..."  # Third account
+
+ # Address types
+ "m/44'/0'/0'/0/x"  # External (receiving) addresses
+ "m/44'/0'/0'/1/x"  # Internal (change) addresses
+
+Note: The apostrophe (') indicates hardened derivation, which provides extra security
+for parent private keys.
 
 Test vectors (verified with iancoleman.io/bip39):
 
@@ -233,6 +263,19 @@ Test vectors (verified with iancoleman.io/bip39):
  mnemonic = "abandon ability able about above absent absorb abstract absurd abuse access accident"
  master = Bitcoin::Master.from_mnemonic(mnemonic)
 
+ # Master node information
  master.seed     # => "4b94d8ad0b6f4cf1715522411695201584beb2a77d3d0ad4a6b9e143c084eb2f..."
  master.key.priv # => "5c4ffc8f27cec820e6d58fb37438b04543bebb388c282c7135ed30c8c27722d4"
  master.key.addr # => "1ELReFsTCUY2mfaDTy32qxYiT49z786eFg"
+
+ # BIP44 derivation (m/44'/0'/0'/0/0)
+ bip44_key = master.node_for_path("m/44'/0'/0'/0/0")
+ bip44_key.addr       # => "1Gq9GxfUAenFVBEWthLSCg5cnXpwkcQfcQ"
+ bip44_key.pub        # => "02453d00e7c1b3098a9851619e4105301e0285f1eea1986e4d1b1b125666a27eff"
+ bip44_key.to_base58  # => "L1kkvNK8ciXEQqqokUzPwCBFpnd9eQRJZ5F8HkV6nfmunM35KnyN"
+
+ # BIP32 derivation (m/0/0)
+ bip32_key = master.node_for_path("m/0/0")
+ bip32_key.addr       # => "1DZG5ER2eBiDZnqKLpQjwSvbLr6wkPePcD"
+ bip32_key.pub        # => "037e03d5741f8a212798096379efdf5e8efeab7a076263792555dc7be87ef0b7a2"
+ bip32_key.to_base58  # => "L45eQ8jVWkyuNiQvCRT5KVrSJ9cU1yLHW4MX9DQcTDUQNU3jcT2G"

@@ -33,6 +33,10 @@ module Bitcoin
     WORDLIST = File.read(File.join(File.dirname(__FILE__), 'wordlist', 'english.txt')).split("\n")
     raise "Invalid wordlist" unless WORDLIST.length == 2048
 
+    # Add constants for BIP32 derivation
+    HARDENED_OFFSET = 0x80000000
+    MASTER_SECRET = "Bitcoin seed"
+
     # Initialize a new master node
     # @param private_key [String] hex-encoded private key
     # @param mnemonic [String] space-separated 24-word mnemonic
@@ -86,7 +90,106 @@ module Bitcoin
       @words ||= File.read(File.join(File.dirname(__FILE__), 'wordlist', 'english.txt')).split("\n")
     end
 
+    # Extract key derivation logic to separate method for better organization
+    def node_for_path(path)
+      indexes = parse_path(path)
+      derive_node(indexes)
+    end
+
     private
+
+    def parse_path(path)
+      path.sub(/^m\/?/, '').split('/').map do |index|
+        if index.end_with?("'") || index.end_with?("h")
+          # Remove the hardened marker and add the offset
+          (index.to_i(10) & 0x7fffffff) + HARDENED_OFFSET
+        else
+          index.to_i(10)
+        end
+      end
+    end
+
+    def derive_node(indexes)
+      # Initialize master key components
+      hmac = generate_master_hmac
+      private_key = hmac[0...32]
+      chain_code = hmac[32..]
+
+      # Derive child keys
+      indexes.each do |index|
+        # Check for invalid derivation paths
+        return nil if private_key.nil? || chain_code.nil?
+
+        data = build_derivation_data(index, private_key)
+        child_private, new_chain_code = derive_child_key(data, chain_code, private_key)
+
+        # Check for invalid child derivation
+        return nil if child_private.nil?
+
+        private_key = child_private
+        chain_code = new_chain_code
+      end
+
+      # Create Bitcoin::Key with the final private key
+      Bitcoin::Key.new(private_key.unpack('H*')[0], nil, compressed: true)
+    rescue StandardError => e
+      Rails.logger.error("Key derivation failed: #{e.message}")
+      nil
+    end
+
+    def generate_master_hmac
+      OpenSSL::HMAC.digest(
+        OpenSSL::Digest::SHA512.new,
+        MASTER_SECRET,
+        [@seed].pack('H*')
+      )
+    end
+
+    def build_derivation_data(index, private_key)
+      if index >= HARDENED_OFFSET
+        # For hardened derivation, prefix private key with 0x00
+        ([0] + private_key.unpack('C*')).pack('C*') + [index].pack('N')
+      else
+        # For normal derivation, use compressed public key
+        key = Bitcoin::Key.new(private_key.unpack('H*')[0], nil, compressed: true)
+        [key.pub].pack('H*') + [index].pack('N')
+      end
+    rescue StandardError => e
+      Rails.logger.error("Failed to build derivation data: #{e.message}")
+      nil
+    end
+
+    def derive_child_key(data, chain_code, parent_private)
+      hmac = OpenSSL::HMAC.digest(
+        OpenSSL::Digest::SHA512.new,
+        chain_code,
+        data
+      )
+
+      child_private = calculate_child_private_key(hmac[0...32], parent_private)
+      [child_private, hmac[32..]]
+    end
+
+    def calculate_child_private_key(child_hmac, parent_private)
+      # Convert inputs to BN
+      child = OpenSSL::BN.new(child_hmac.unpack('H*')[0], 16)
+      parent = OpenSSL::BN.new(parent_private.unpack('H*')[0], 16)
+
+      # Define secp256k1 curve order
+      secp256k1_order = OpenSSL::BN.new(
+        "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141",
+        16
+      )
+
+      # Calculate child key
+      result = ((child + parent) % secp256k1_order)
+
+      # Check for invalid keys (zero or >= curve order)
+      return nil if result.zero? || result >= secp256k1_order
+
+      # Convert back to bytes
+      [result.to_s(16).rjust(64, '0')].pack('H*')
+    end
 
     # Convert mnemonic phrase back to entropy
     # @param mnemonic [String] space-separated 24-word mnemonic
