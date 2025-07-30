@@ -259,8 +259,24 @@ module Bitcoin
 
     # Set +priv+ as the new private key (converting from hex).
     def set_priv(priv)
+      # Convert to string and strip whitespace
+      priv = priv.to_s.strip
+      
+      # Validate hex string format
+      unless priv.match?(/\A[0-9a-fA-F]+\z/)
+        raise ArgumentError, "Private key must be a valid hexadecimal string, got: #{priv.inspect}"
+      end
+      
+      # Validate length (64 hex chars = 32 bytes)
+      unless priv.length == 64
+        raise ArgumentError, "Private key must be exactly 64 hex characters (got #{priv.length})"
+      end
+      
       value = priv.to_i(16)
-      raise 'private key is not on curve' unless MIN_PRIV_KEY_MOD_ORDER <= value && value <= MAX_PRIV_KEY_MOD_ORDER
+      unless MIN_PRIV_KEY_MOD_ORDER <= value && value <= MAX_PRIV_KEY_MOD_ORDER
+        raise ArgumentError, 'Private key value is not within valid range (must be between 1 and n-1 where n is the order of the secp256k1 curve)'
+      end
+      
       @key.private_key = OpenSSL::BN.from_hex(priv)
     end
 
